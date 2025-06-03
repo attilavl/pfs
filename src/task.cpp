@@ -23,8 +23,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <fstream>
-#include <iostream>
 #include <system_error>
 
 #include "pfs/defer.hpp"
@@ -34,6 +32,7 @@
 #include "pfs/parsers/lines.hpp"
 #include "pfs/parsers/common.hpp"
 #include "pfs/parsers/number.hpp"
+#include "pfs/parsers/smaps.hpp"
 #include "pfs/parsers/task_io.hpp"
 #include "pfs/parsers/task_status.hpp"
 #include "pfs/task.hpp"
@@ -351,6 +350,14 @@ std::vector<mem_region> task::get_maps() const
     return output;
 }
 
+std::vector<mem_map> task::get_smaps() const
+{
+    static const std::string MAPS_FILE("smaps");
+    auto path = _task_root + MAPS_FILE;
+
+    return parsers::parse_smaps(path);
+}
+
 mem task::get_mem() const
 {
     static const std::string MEM_FILE("mem");
@@ -392,9 +399,9 @@ std::unordered_map<int, fd> task::get_fds() const
     return fds;
 }
 
-std::set<ino_t> task::get_fds_inodes() const
+std::set<ino64_t> task::get_fds_inodes() const
 {
-    std::set<ino_t> inodes;
+    std::set<ino64_t> inodes;
 
     for (auto& fd : get_fds())
     {
@@ -409,7 +416,7 @@ net task::get_net() const
     return net(_task_root);
 }
 
-ino_t task::get_ns(const std::string& ns) const
+ino64_t task::get_ns(const std::string& ns) const
 {
     static const std::string NS_DIR("ns/");
     auto path = _task_root + NS_DIR + ns;
@@ -417,7 +424,7 @@ ino_t task::get_ns(const std::string& ns) const
     return utils::get_inode(path);
 }
 
-std::unordered_map<std::string, ino_t> task::get_ns() const
+std::unordered_map<std::string, ino64_t> task::get_ns() const
 {
     static const std::string NS_DIR("ns/");
     auto path = _task_root + NS_DIR;
@@ -430,7 +437,7 @@ std::unordered_map<std::string, ino_t> task::get_ns() const
     }
     defer close_dirfd([dirfd] { close(dirfd); });
 
-    std::unordered_map<std::string, ino_t> ns;
+    std::unordered_map<std::string, ino64_t> ns;
 
     for (const auto& file :
          utils::enumerate_files(path, /* include_dots */ false))

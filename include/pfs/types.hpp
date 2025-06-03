@@ -23,14 +23,13 @@
 #include <chrono>
 #include <set>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace pfs {
 
-constexpr uid_t INVALID_UID   = (uid_t)-1;
-constexpr pid_t INVALID_PID   = (pid_t)-1;
-constexpr ino_t INVALID_INODE = (ino_t)0;
+constexpr uid_t   INVALID_UID   = (uid_t)-1;
+constexpr pid_t   INVALID_PID   = (pid_t)-1;
+constexpr ino64_t INVALID_INODE = (ino64_t)0;
 
 // Note: We only support values that exist post 2.6.32.
 enum class task_state
@@ -266,22 +265,22 @@ struct task_status
     std::vector<pid_t> ns_pid;
     std::vector<pid_t> ns_pgid;
     std::vector<pid_t> ns_sid;
-    size_t vm_peak                  = 0; // In kB
-    size_t vm_size                  = 0; // In kB
-    size_t vm_lck                   = 0; // In kB
-    size_t vm_pin                   = 0; // In kB
-    size_t vm_hwm                   = 0; // In kB
-    size_t vm_rss                   = 0; // In kB
-    size_t rss_anon                 = 0; // In kB
-    size_t rss_file                 = 0; // In kB
-    size_t rss_shmem                = 0; // In kB
-    size_t vm_data                  = 0; // In kB
-    size_t vm_stk                   = 0; // In kB
-    size_t vm_exe                   = 0; // In kB
-    size_t vm_lib                   = 0; // In kB
-    size_t vm_pte                   = 0; // In kB
-    size_t vm_swap                  = 0; // In kB
-    size_t huge_tlb_pages           = 0; // In kB
+    uint64_t vm_peak                  = 0; // In kB
+    uint64_t vm_size                  = 0; // In kB
+    uint64_t vm_lck                   = 0; // In kB
+    uint64_t vm_pin                   = 0; // In kB
+    uint64_t vm_hwm                   = 0; // In kB
+    uint64_t vm_rss                   = 0; // In kB
+    uint64_t rss_anon                 = 0; // In kB
+    uint64_t rss_file                 = 0; // In kB
+    uint64_t rss_shmem                = 0; // In kB
+    uint64_t vm_data                  = 0; // In kB
+    uint64_t vm_stk                   = 0; // In kB
+    uint64_t vm_exe                   = 0; // In kB
+    uint64_t vm_lib                   = 0; // In kB
+    uint64_t vm_pte                   = 0; // In kB
+    uint64_t vm_swap                  = 0; // In kB
+    uint64_t huge_tlb_pages           = 0; // In kB
     bool core_dumping               = false;
     size_t threads                  = 1;
     std::pair<size_t, size_t> sig_q = {0, 0};
@@ -326,18 +325,49 @@ struct mem_perm
 
 struct mem_region
 {
-    size_t start_address = 0;
-    size_t end_address   = 0;
+    uint64_t start_address = 0;
+    uint64_t end_address   = 0;
     mem_perm perm;
     size_t offset = 0;
     dev_t device  = 0;
-    ino_t inode   = INVALID_INODE;
+    ino64_t inode = INVALID_INODE;
     std::string pathname;
 
     bool operator<(const mem_region& rhs) const
     {
         return start_address < rhs.start_address;
     }
+};
+
+struct mem_map
+{
+    mem_region region;
+
+    uint64_t size             = 0; // In kB
+    uint64_t kernel_page_size = 0; // In kB
+    uint64_t mmu_page_size    = 0; // In kB
+    uint64_t rss              = 0; // In kB
+    uint64_t pss              = 0; // In kB
+    uint64_t pss_dirty        = 0; // In kB
+    uint64_t shared_clean     = 0; // In kB
+    uint64_t shared_dirty     = 0; // In kB
+    uint64_t private_clean    = 0; // In kB
+    uint64_t private_dirty    = 0; // In kB
+    uint64_t referenced       = 0; // In kB
+    uint64_t anonymous        = 0; // In kB
+    uint64_t ksm              = 0; // In kB
+    uint64_t lazy_free        = 0; // In kB
+    uint64_t anon_huge_pages  = 0; // In kB
+    uint64_t shmem_pmd_mapped = 0; // In kB
+    uint64_t file_pmd_mapped  = 0; // In kB
+    uint64_t shared_hugetlb   = 0; // In kB
+    uint64_t private_hugetlb  = 0; // In kB
+    uint64_t swap             = 0; // In kB
+    uint64_t swap_pss         = 0; // In kB
+    uint64_t locked           = 0; // In kB
+
+    bool thp_eligible       = false;
+    std::vector<std::string> vm_flags;
 };
 
 struct module
@@ -522,7 +552,7 @@ struct net_socket
     size_t retransmits;
     uid_t uid;
     size_t timeouts;
-    ino_t inode;
+    ino64_t inode;
     int ref_count;
     size_t skbuff;
 
@@ -541,7 +571,11 @@ struct unix_socket
     {
         stream    = 1,
         datagram  = 2,
+        raw       = 3,
+        rdm       = 4,
         seqpacket = 5,
+        dccp      = 6,
+        packet    = 10,
     };
 
     // See the Kerne's 'socket_state' enum for more information
@@ -560,7 +594,7 @@ struct unix_socket
     int flags;
     type socket_type;
     state socket_state;
-    ino_t inode;
+    ino64_t inode;
     std::string path;
 
     bool operator<(const unix_socket& rhs) const
@@ -580,7 +614,7 @@ struct netlink_socket
     bool dumping     = false;
     int ref_count    = 0;
     unsigned drops   = 0;
-    ino_t inode      = INVALID_INODE;
+    ino64_t inode    = INVALID_INODE;
 
     bool operator<(const unix_socket& rhs) const
     {
@@ -639,23 +673,23 @@ struct net_arp
 // Hint: See 'https://docs.kernel.org/block/stat.html'
 struct block_stat
 {
-    unsigned int read_ios;        // number of read I/Os processed [unit: requests]
-    unsigned int read_merges;     // number of read I/Os merged with in-queue I/O [unit: requests]
-    unsigned int read_sectors;    // number of sectors read [unit: sectors]
-    unsigned int read_ticks;      // total wait time for read requests [unit: ms]
-    unsigned int write_ios;       // number of write I/Os processed [unit: requests]
-    unsigned int write_merges;    // number of write I/Os merged with in-queue I/O [unit: requests]
-    unsigned int write_sectors;   // number of sectors written [unit: sectors]
-    unsigned int write_ticks;     // total wait time for write requests [unit: ms]
-    unsigned int in_flight;       // number of I/Os currently in flight [unit: requests]
-    unsigned int io_ticks;        // total time this block device has been active [unit: ms]
-    unsigned int time_in_queue;   // total wait time for all requests [unit: ms]
-    unsigned int discard_ios;     // number of discard I/Os processed [unit: requests]
-    unsigned int discard_merges;  // number of discard I/Os merged with in-queue I/O [unit: requests]
-    unsigned int discard_sectors; // number of sectors discarded [unit: sectors]
-    unsigned int discard_ticks;   // total wait time for discard requests [unit: ms]
-    unsigned int flush_ios;       // number of flush I/Os processed [unit: requests]
-    unsigned int flush_ticks;     // total wait time for flush requests [unit: ms]
+    unsigned long long read_ios;        // number of read I/Os processed [unit: requests]
+    unsigned long long read_merges;     // number of read I/Os merged with in-queue I/O [unit: requests]
+    unsigned long long read_sectors;    // number of sectors read [unit: sectors]
+    unsigned long long read_ticks;      // total wait time for read requests [unit: ms]
+    unsigned long long write_ios;       // number of write I/Os processed [unit: requests]
+    unsigned long long write_merges;    // number of write I/Os merged with in-queue I/O [unit: requests]
+    unsigned long long write_sectors;   // number of sectors written [unit: sectors]
+    unsigned long long write_ticks;     // total wait time for write requests [unit: ms]
+    unsigned long long in_flight;       // number of I/Os currently in flight [unit: requests]
+    unsigned long long io_ticks;        // total time this block device has been active [unit: ms]
+    unsigned long long time_in_queue;   // total wait time for all requests [unit: ms]
+    unsigned long long discard_ios;     // number of discard I/Os processed [unit: requests]
+    unsigned long long discard_merges;  // number of discard I/Os merged with in-queue I/O [unit: requests]
+    unsigned long long discard_sectors; // number of sectors discarded [unit: sectors]
+    unsigned long long discard_ticks;   // total wait time for discard requests [unit: ms]
+    unsigned long long flush_ios;       // number of flush I/Os processed [unit: requests]
+    unsigned long long flush_ticks;     // total wait time for flush requests [unit: ms]
 };
 
 struct syscall
